@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+<head>
+  <title>Xtream</title>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+</head>
+<body>
+  <canvas id="bg-illumination"></canvas>
+  <div id="main-container" mode="cinema">
+    <div id="video-container" mode="cinema">
+      <video id="stream" mode="cinema" muted playsinline></video>
+      <div id="video-overlay">
+        <div id="top-overlay">
+          <input id="seek-bar" type="range" max="1000" value="0">
+          <div id="top-buttons">
+            <div id="playlist-container"></div>
+            <button id="screen-share-bt"><i class="bi bi-cast"></i></button>
+            <button id="fullscreen-bt"><i class="bi bi-fullscreen"></i></button>
+          </div>
+        </div>
+        <div id="center-overlay">
+          <button id="play-bt"><i class="bi bi-play-fill"></i></button>
+          <button id="next-bt"><i class="bi bi-skip-forward-fill"></i></button>
+        </div>
+        <div id="bottom-overlay">
+          <button id="mute-bt"><i class="bi bi-volume-mute-fill"></i></button>
+          <select id="audio-selector"></select>
+          <button id="subtitle-bt"><i class="bi bi-badge-cc-fill"></i></button>
+          <select id="subtitle-selector"></select>
+        </div>
+      </div>
+    </div>
+    <div id="chat-container">
+      <div id="user-table"></div>
+      <div id="chat-tl"></div>
+      <div id="chat-input-container">
+        <textarea id="chat-input"></textarea>
+        <button id="send-bt"></button>
+      </div>
+    </div>
+  </div>
+  <div id="debug-info"></div>
+  <script type="module" src="script.js"></script>
+</body>
+</html>
