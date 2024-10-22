@@ -15,4 +15,5 @@ The project is still under heavy development. Expect lots of bugs.
 
 ## How does it work?
 The videos you drop are shared with your friends in a peer-to-peer manner, using WebRTC data channels. The files are encrypted from end to end and they don't go through our server.
+
 Depending on the Internet provider, some users can't connect to others. This is often due to CG-NAT, and it happens more on cellular connections. I'm working to fix that.
