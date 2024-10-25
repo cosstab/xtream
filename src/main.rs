@@ -36,12 +36,23 @@ struct Cli {
     /// Listening port
     #[arg(short, long, default_value_t = 8080)]
     port: u16,
+
+    /// Enable https
+    #[arg(long)]
+    https: bool,
+
+    /// Path to https certificate
+    #[arg(short, long, default_value = "cert.pem")]
+    cert: String,
+
+    /// Path to https private key
+    #[arg(short, long,  default_value = "key.rsa")]
+    key: String,
 }
 
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
-    
 
     let rooms = Rooms::default();
     // Put rooms into a Warp filter, so we can pass them to every petition
@@ -87,17 +98,20 @@ async fn main() {
         .and(users)
         .and_then(|bytes: bytes::Bytes, sdp: Arc<Mutex<String>>, users| manage_whip_request(bytes, sdp, users));*/
 
-    /*let https = warp::serve(dispatcher.or(frontend.clone().or(ws_signaling.clone())))
-        .tls()
-        .cert_path("cert.pem")
-        .key_path("key.rsa")
-        .run(([127, 0, 0, 1], 443));*/
-    
-    let http = warp::serve(dispatcher.or(frontend.or(ws_signaling)))
-        .run((cli.addr, cli.port));
+    if cli.https {
+        warp::serve(dispatcher.or(frontend.clone().or(ws_signaling)))
+            .tls()
+            .cert_path(cli.cert)
+            .key_path(cli.key)
+            .run((cli.addr, cli.port))
+            .await;
+    } else {
+        warp::serve(dispatcher.or(frontend.or(ws_signaling)))
+            .run((cli.addr, cli.port))
+            .await;
+    }
 
     //future::join(http, https).await;
-    http.await;
 }
 
 async fn new_ws_connection<'a>(ws: WebSocket, room_id: String, rooms: Rooms<'a>) {
