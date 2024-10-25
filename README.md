@@ -3,6 +3,15 @@ A place to watch videos with friends, without loss of quality. Just share your l
 
 [Try it out](https://xtream.chabal.es)
 
+## Demos
+This is not screen sharing!
+
+### Testing on different devices
+https://github.com/user-attachments/assets/ca858ba5-b6a0-4496-b796-a71ebed08351
+
+### Testing subtitles and audio tracks
+https://github.com/user-attachments/assets/2c16682b-54cc-4bd8-af70-f4880c51fbfe
+
 ## Status
 The project is still under heavy development. Expect lots of bugs.
 
