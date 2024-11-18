@@ -1,6 +1,8 @@
 # xtream
 A place to watch videos with friends, without loss of quality. Just share your link and drop a video file!
 
+No need to set up a server or install any program or extension.
+
 [Try it out](https://xtream.chabal.es)
 
 ## Demos
