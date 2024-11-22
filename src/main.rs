@@ -29,9 +29,8 @@ type Rooms<'a> = Arc<RwLock<HashMap<String, room::SharedRoom>>>;
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Cli {
-    /// IPv4 address the server will be listening on
-    #[arg(short, long)]
-    addr: IpAddr,
+    /// IPv4 address or path to the Unix socket the server will be listening on
+    addr: String,
     
     /// Listening port
     #[arg(short, long, default_value_t = 8080)]
@@ -48,6 +47,10 @@ struct Cli {
     /// Path to https private key
     #[arg(short, long,  default_value = "key.rsa")]
     key: String,
+
+    /// Use Unix socket instead of IP
+    #[arg(short, long)]
+    usock: bool,
 }
 
 #[tokio::main]
@@ -98,17 +101,33 @@ async fn main() {
         .and(users)
         .and_then(|bytes: bytes::Bytes, sdp: Arc<Mutex<String>>, users| manage_whip_request(bytes, sdp, users));*/
 
-    if cli.https {
-        warp::serve(dispatcher.or(frontend.clone().or(ws_signaling)))
-            .tls()
-            .cert_path(cli.cert)
-            .key_path(cli.key)
-            .run((cli.addr, cli.port))
+    let routes = dispatcher.or(frontend.or(ws_signaling));
+
+    if cli.usock {
+        use tokio::net::UnixListener;
+        use tokio_stream::wrappers::UnixListenerStream;
+
+        let listener = UnixListener::bind(cli.addr).expect("Problem when binding to Unix socket");
+        let incoming = UnixListenerStream::new(listener);
+
+        warp::serve(routes)
+            .run_incoming(incoming)
             .await;
     } else {
-        warp::serve(dispatcher.or(frontend.or(ws_signaling)))
-            .run((cli.addr, cli.port))
-            .await;
+        let ip: IpAddr = cli.addr.parse().expect("Can't parse IP address");
+
+        if cli.https {
+            warp::serve(routes)
+                .tls()
+                .cert_path(cli.cert)
+                .key_path(cli.key)
+                .run((ip, cli.port))
+                .await;
+        } else {
+            warp::serve(routes)
+                .run((ip, cli.port))
+                .await;
+        }
     }
 
     //future::join(http, https).await;
