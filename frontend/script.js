@@ -98,6 +98,12 @@ subtitleSelector.addEventListener('change', (ev) => {
   textTracks[selectedTrack].mode = 'showing'
 })
 
+let sBDragging = false
+
+seekBar.addEventListener('mousedown', () => {
+  sBDragging = true
+})
+
 seekBar.addEventListener('change', () => {
   const videoElement = roomPlayer.videoElement
   const wasPaused = videoElement.paused
@@ -107,11 +113,14 @@ seekBar.addEventListener('change', () => {
   sendVideoSync(videoElement, { paused: wasPaused })
 
   if (!wasPaused) setTimeout(() => videoElement.play(), 500)
+
+  sBDragging = false
 })
 
 setInterval(() => {
-  seekBar.value = (localStream.currentTime / localStream.duration) * 1000
-}, 1000)
+  if (!sBDragging)
+    seekBar.value = (localStream.currentTime / localStream.duration) * 1000
+}, 200)
 
 
 //-------------------------- File drop zone
