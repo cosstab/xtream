@@ -74,6 +74,8 @@ export default class Player {
 
     this.ffmpeg.on("progress", ({ progress }) => {
       console.log(progress)
+      // Show progress on seek bar
+      this.videoElement.currentTime = this.videoElement.duration * progress
     })
 
     await this.ffmpeg.load({
@@ -322,6 +324,8 @@ export class FilePlayer extends Player {
         resolve()
       })
     ])
+
+    this.videoElement.currentTime = 0 //Reset time (we used the seek bar to show progress when loading)
 
     this.ffmpeg.deleteFile(this.fileName)
 
