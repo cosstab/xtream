@@ -11,6 +11,8 @@ var roomPlayer = null
 const FULLSYNC = true
 var waitingToSync = false
 
+var videoLoaded = false
+
 //users[0] = {} //Create user for WHIP encoder
 
 //----------------------------------- Frontend logic -----------------------------------
@@ -187,6 +189,9 @@ function bgIlluminationUpdate() {
 var mode = 'cinema' //cinema, flex-video, portrait
 
 /* 
+no-video
+When there's no video, default state.
+
 cinema
 When player has 100% of height of the screen, and there is more than enough place for chat
 
@@ -198,7 +203,7 @@ When player would take less than 60% of the height of the screen if fills the fu
 of the screen
 */
 
-const observer = new ResizeObserver(() => {
+const resizeLayout = () => {
   const containerRectangle = mainContainer.getBoundingClientRect()
   const playerRectangle = localStream.getBoundingClientRect()
   const chatContainerRectangle = chatContainer.getBoundingClientRect()
@@ -209,7 +214,9 @@ const observer = new ResizeObserver(() => {
 
   var newMode
 
-  if (heightInPortraitMode <= containerRectangle.height*0.6) 
+  if (!videoLoaded)
+    newMode = 'no-video'
+  else if (heightInPortraitMode <= containerRectangle.height*0.6) 
     newMode = 'portrait'
   else if (playerRectangle.height >= containerRectangle.height-1 && (chatContainerRectangle.width > chatMinWidth)) 
     newMode = 'cinema'
@@ -224,7 +231,9 @@ const observer = new ResizeObserver(() => {
       elem.setAttribute('mode', mode)
     }
   }
-})
+}
+
+const observer = new ResizeObserver(resizeLayout)
 
 observer.observe(mainContainer)
 
@@ -410,6 +419,9 @@ async function updatePlayerControls() {
     option.text = subName
     subtitleSelector.options.add(option)
   }
+
+  videoLoaded = true
+  resizeLayout()
 }
 
 //------------------------------- Playlist -------------------------------
@@ -483,8 +495,12 @@ async function playItem(idx){
   const {mediaUuid, player, htmlElement, remote, ownerId} = playlist[idx]
   roomPlayer = player
 
+  // Set no-video mode of layout in case there was a previous video
+  videoLoaded = false
+  resizeLayout()
+
   if (remote) {
-    receiveMedia(mediaUuid, player, ownerId)
+    await receiveMedia(mediaUuid, player, ownerId)
   } else {
     htmlElement.classList.add('loader')
     await player.loadStreams()

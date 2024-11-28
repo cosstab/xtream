@@ -69,6 +69,10 @@ video[mode='portrait'] {
     min-width: 100%;
 }
 
+video[mode='no-video'] {
+    min-width: 70vw;
+}
+
 #video-overlay {
     opacity: 0;
     transition: opacity 0.2s;
@@ -156,7 +160,7 @@ select {
     position: absolute;
     inset: -10px;
     border-radius: 50%;
-    border: 8px solid var(--color-2);
+    border: 8px solid #00ff62;
     animation: l18 2s infinite linear;
 }
 @keyframes l18 {
