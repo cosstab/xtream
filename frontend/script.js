@@ -355,6 +355,7 @@ localStream.addEventListener('pause', (event) => {
 
 localStream.addEventListener("loadeddata", (event) => {
   console.log("Video loaded.")
+  updatePlayerControls()
 })
 
 localStream.addEventListener("canplay", (event) => {
@@ -422,6 +423,8 @@ async function updatePlayerControls() {
 
   videoLoaded = true
   resizeLayout()
+
+  playlist[playing].htmlElement.classList.remove('loader')
 }
 
 //------------------------------- Playlist -------------------------------
@@ -499,14 +502,12 @@ async function playItem(idx){
   videoLoaded = false
   resizeLayout()
 
-  if (remote) {
-    await receiveMedia(mediaUuid, player, ownerId)
-  } else {
-    htmlElement.classList.add('loader')
+  htmlElement.classList.add('loader')
+  
+  if (remote)
+    receiveMedia(mediaUuid, player, ownerId)
+  else
     await player.loadStreams()
-    await updatePlayerControls()
-    htmlElement.classList.remove('loader')
-  }
 }
 
 async function removePlaylistItemsFromUser(userId) {
@@ -917,7 +918,7 @@ async function sendMedia(socketLabel, socket) {
 
 async function receiveMedia(mediaUuid, player, ownerId) {
   const otherSocket = await createDataChannel(ownerId, `other.${mediaUuid}`)
-  otherSocket.addEventListener('open', player.receiveStreams(otherSocket, 'other', updatePlayerControls))
+  otherSocket.addEventListener('open', player.receiveStreams(otherSocket, 'other')) //, updatePlayerControls))
 
   const videoSocket = await createDataChannel(ownerId, `video.${mediaUuid}`)
   videoSocket.addEventListener('open', player.receiveStreams(videoSocket, 'video'))
