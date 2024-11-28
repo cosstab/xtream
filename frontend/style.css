@@ -89,6 +89,10 @@ video[mode='no-video'] {
     font-size: 40px;
 }
 
+#video-overlay[mode='no-video'] {
+    opacity: 1;
+}
+
 #top-overlay {
     width: 100%;
     display: flex;
