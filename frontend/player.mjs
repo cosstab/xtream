@@ -188,6 +188,11 @@ export class FilePlayer extends Player {
       codecs: 'codecs="avc1.4d0034"',
       extension: 'mp4'
     },
+    hevc: {
+      transcode: false,
+      codecs: 'codecs="hev1.1.6.L120.90"',
+      extension: 'mp4'
+    },
     opus: {
       transcode: false,
       codecs: 'codecs="opus"',
