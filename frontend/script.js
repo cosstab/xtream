@@ -1,7 +1,7 @@
 import { StreamableFilePlayer, StreamPlayer } from './player.mjs'
 
 var myId
-const users = {}
+const users = {} //TODO: create User class
 //var sentStream
 var streaming = false
 //var relaying = false
@@ -25,6 +25,9 @@ const dropZone = window
 const chatContainer = document.getElementById('chat-container')
 const mainContainer = document.getElementById('main-container')
 const playlistContainer = document.getElementById('playlist-container')
+const usernameDialog = document.getElementById("username-dialog")
+const usernameDialogInput = document.getElementById('username-input')
+const usernameForm = document.getElementById('username-form')
 
 const sendBt = document.getElementById('send-bt')
 const screenShareBt = document.getElementById('screen-share-bt')
@@ -44,7 +47,7 @@ function sendMessage() {
 sendBt.addEventListener('click', () => sendMessage())
 
 window.addEventListener('keydown', (ev) => {
-  if (ev.key === 'Enter' && !ev.shiftKey) {
+  if (ev.key === 'Enter' && !ev.shiftKey && document.activeElement === chatInput) {
     sendMessage()
     ev.preventDefault()
   }
@@ -151,13 +154,37 @@ function dropHandler(ev) {
   })
 }
 
-function appendMessageToTL(msg) {
+function updateUserList() {
+  let text = ""
+
+  for (let id in users) {
+    const user = users[id]
+
+    if (!user.left) {
+      text += user.username ?? id
+      text += ", "
+    }
+  }
+
+  userTable.textContent = text.slice(0, -2)
+}
+
+function appendUserMessage(msg) {
+  const username = users[msg.from]?.username ?? msg.from
+
   const line = document.createElement('p')
-  line.textContent = msg.from + ">" + msg.txt
+  line.textContent = username + "> " + msg.txt
   chatTL.appendChild(line)
   chatTL.scrollTop = chatTL.scrollHeight
 }
 
+function appendInfoMessage(txt) {
+  const line = document.createElement('p')
+  line.classList.add('info-msg')
+  line.textContent = txt
+  chatTL.appendChild(line)
+  chatTL.scrollTop = chatTL.scrollHeight
+}
 
 //-------------------------- Background illumination
 // We'll apply the filters to a low resolution buffer canvas for improved performance
@@ -186,7 +213,7 @@ function bgIlluminationUpdate() {
 
 
 //-------------------------- Layout
-var mode = 'cinema' //cinema, flex-video, portrait
+var mode = 'cinema'
 
 /* 
 no-video
@@ -462,7 +489,7 @@ async function addPlaylistItemFromFile(file){
 }
 
 async function addPlaylistItemFromRemote(mediaUuid, name, metadata, ownerId) {
-  if (users[ownerId] === undefined) return
+  if (users[ownerId].left) return
 
   const player = new StreamPlayer(localStream, metadata)
   await player.initialize()
@@ -530,101 +557,138 @@ function sendToServer(msg){
 
 webSocket.onopen = (event) => {
     sendMessage = () => {
-        const msg = {
-          type: "chat",
-          from: myId,
-          txt: chatInput.value
-        }
-        
-        appendMessageToTL(msg)
-        sendToServer(msg)
-        chatInput.value = ""
+      if (chatInput.value.trim() == "") return
+      const msg = {
+        type: "chat",
+        from: myId,
+        txt: chatInput.value
+      }
+      
+      appendUserMessage(msg)
+      sendToServer(msg)
+      chatInput.value = ""
     }
+
+    //TODO: show disclaimer for P2P connections and don't allow peer
+    //connections until the user accepts
+    usernameDialog.showModal()
+    usernameForm.addEventListener('submit', (ev) => {
+      ev.preventDefault()
+      
+      const msg = {
+        type: 'user-identified',
+        from: myId,
+        username: usernameDialogInput.value
+      }
+
+      sendToServer(msg)
+      usernameDialog.close()
+
+      manageMessage(msg) //Send to ourselves so we can save the info of our user
+    })
+}
+
+function manageMessage(msg) {
+  //if ((msg.to !== undefined) && (msg.to != myId)) return
+
+  debug(msg)
+  console.log(msg.type)
+
+  switch(msg.type) {
+    case "chat":
+      appendUserMessage(msg)
+      break
+    case "video-offer":
+      handleVideoOfferMsg(msg)
+      break
+    case "video-answer":
+      handleVideoAnswerMsg(msg)
+      break
+    case "new-ice-candidate":
+      handleNewICECandidateMsg(msg)
+      break
+    case "new-user":
+      users[msg.id] = {}
+      updateUserList()
+      
+      if (streaming) {
+        let peersToConnect = {}
+        peersToConnect[msg.id] = users[msg.id]
+        streamToPeers(peersToConnect) //Pass new peer in object form
+      }
+      break
+    case "user-identified":
+      if (!users[msg.from]) {
+        // Save offline users so we can see their names on old messages
+        users[msg.from] = {
+          username: msg.username,
+          left: true
+        }
+
+        break
+      }
+
+      users[msg.from].username = msg.username
+      updateUserList()
+      appendInfoMessage('User joined: ' + msg.username)
+      break
+    case "user-left":
+      users[msg.id].peerConnection?.close()
+      users[msg.id].left = true
+      updateUserList()
+      removePlaylistItemsFromUser(msg.id)
+      appendInfoMessage('User left: ' + (users[msg.id].username ?? msg.id))
+      break
+    case "room-status":
+      myId = msg.myId
+      msg.users.forEach((user)=> {
+        users[user] = {}
+      })
+      updateUserList()
+      break
+    case 'sync':
+      if (localStream.currentTime != msg.currentTime) localStream.currentTime = msg.currentTime
+      localStream.pause()
+
+      if (!msg.paused) setTimeout(() => localStream.play(), 300)
+      break
+    case 'sync?':
+      if (seeding) {
+        if (FULLSYNC && !localStream.paused) {
+          // If FULLSYNC is activated and video playing, wait for the new user to synchronize everybody
+          localStream.pause()
+          sendVideoSync(localStream, { paused: true })
+
+          sendToServer({
+            type: 'you-sync',
+            to: msg.from,
+            currentTime: localStream.currentTime
+          })
+        }
+        else sendVideoSync(localStream, { to: msg.from })
+      }
+      break
+    case 'you-sync':
+      waitingToSync = true
+      localStream.currentTime = msg.currentTime
+      break
+    case 'playlist-new-media':
+      addPlaylistItemFromRemote(msg.mediaUuid, msg.name, msg.metadata, msg.from)
+      break
+    /*case 'request-media':
+      createDataChannel(msg.from, msg.mediaUuid)
+      break
+    case "torrent":
+      receiveTorrent(msg.magnet, msg.from)
+      break
+    case "torrent-signal":
+      receivedTorrentSignal(msg.from, msg.data)
+      break*/
+  }
 }
 
 webSocket.onmessage = async (event) => {
-    const msg = JSON.parse(event.data)
-
-    //if ((msg.to !== undefined) && (msg.to != myId)) return
-
-    debug(msg)
-    console.log(msg.type)
-
-    switch(msg.type) {
-      case "chat":
-        appendMessageToTL(msg)
-        break
-      case "video-offer":
-        handleVideoOfferMsg(msg)
-        break
-      case "video-answer":
-        handleVideoAnswerMsg(msg)
-        break
-      case "new-ice-candidate":
-        handleNewICECandidateMsg(msg)
-        break
-      case "new-user":
-        users[msg.id] = {}
-        userTable.textContent = Object.keys(users)
-        
-        if (streaming) {
-          let peersToConnect = {}
-          peersToConnect[msg.id] = users[msg.id]
-          streamToPeers(peersToConnect) //Pass new peer in object form
-        }
-        break
-      case "user-left":
-        users[msg.id].peerConnection?.close()
-        delete users[msg.id]
-        userTable.textContent = Object.keys(users)
-        removePlaylistItemsFromUser(msg.id)
-        break
-      case "room-status":
-        myId = msg.myId
-        msg.users.forEach((user)=> {
-          users[user] = {}
-        })
-        userTable.textContent = Object.keys(users)
-        break
-      case 'sync':
-        if (localStream.currentTime != msg.currentTime) localStream.currentTime = msg.currentTime
-        localStream.pause()
-
-        if (!msg.paused) setTimeout(() => localStream.play(), 300)
-        break
-      case 'sync?':
-        if (seeding) {
-          if (FULLSYNC && !localStream.paused) {
-            // If FULLSYNC is activated and video playing, wait for the new user to synchronize everybody
-            localStream.pause()
-            sendVideoSync(localStream, { paused: true })
-
-            sendToServer({
-              type: 'you-sync',
-              to: msg.from,
-              currentTime: localStream.currentTime
-            })
-          }
-          else sendVideoSync(localStream, { to: msg.from })
-        }
-        break
-      case 'you-sync':
-        waitingToSync = true
-        localStream.currentTime = msg.currentTime
-        break
-      case 'playlist-new-media':
-        addPlaylistItemFromRemote(msg.mediaUuid, msg.name, msg.metadata, msg.from)
-        break
-      /*case 'request-media':
-        createDataChannel(msg.from, msg.mediaUuid)
-        break
-      case "torrent":
-        receiveTorrent(msg.magnet, msg.from)
-        break
-      case "torrent-signal":
-        receivedTorrentSignal(msg.from, msg.data)
-        break*/
-    }
+    manageMessage(JSON.parse(event.data))
 }
 
 webSocket.onerror = (ev) => {

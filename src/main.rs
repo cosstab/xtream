@@ -188,6 +188,11 @@ async fn user_connected(ws: WebSocket, room: &room::SharedRoom, user_id: u8) -> 
         }
     });
 
+    // Save the sender in our list of connected users.
+    room.write().await
+        .users
+        .insert(user_id, tx.clone());
+
     // Send JSON list of online users to the new one.
     let users = room.read().await.users.clone();
     let id_vec = users.keys().cloned().collect::<Vec<u8>>();
@@ -204,11 +209,6 @@ async fn user_connected(ws: WebSocket, room: &room::SharedRoom, user_id: u8) -> 
         tx.send(Message::text(msg))?;
     }
  
-    // Save the sender in our list of connected users.
-    room.write().await
-        .users
-        .insert(user_id, tx);
-
     // Notify the others that a new user joined
     let json = json!({
         "type": "new-user",
@@ -274,7 +274,7 @@ async fn manage_message(my_id: u8, msg: Message, room: &room::SharedRoom) -> Res
     // Save certain messages into room_state so new connections get previous events
     let msg_type = parsed_msg["type"].as_str().unwrap_or("");
     match msg_type {
-        "playlist-new-media" | "chat" 
+        "playlist-new-media" | "chat" | "user-identified"
             => room.write().await
                 .state.push(msg.to_string()),
         _ => ()
