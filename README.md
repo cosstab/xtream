@@ -9,10 +9,10 @@ No need to set up a server or install any program or extension.
 This is not screen sharing!
 
 ### Testing on different devices
-https://github.com/user-attachments/assets/ca858ba5-b6a0-4496-b796-a71ebed08351
+![I drop a video file on my desktop computer and it gets instantly replicated on a laptop and an Android phone](demos/demo1.mp4 "Demo video 1")
 
 ### Testing subtitles and audio tracks
-https://github.com/user-attachments/assets/2c16682b-54cc-4bd8-af70-f4880c51fbfe
+![The player lets you choose your preferred audio and subtitle language](demos/demo2.mp4 "Demo video 2")
 
 ## Status
 The project is still under heavy development. Expect lots of bugs.
