@@ -7,6 +7,7 @@ var streaming = false
 //var relaying = false
 var seeding = false
 var roomPlayer = null
+var joined = false
 
 const FULLSYNC = true
 var waitingToSync = false
@@ -507,13 +508,6 @@ async function addPlaylistItemFromRemote(mediaUuid, name, metadata, ownerId) {
     ownerId
   })
 
-  //if (newLen === 1) 
-  // Ask for the current video position
-  console.log('Sending "sync?"')
-  sendToServer({
-    type: 'sync?',
-    from: myId
-  })
   playItem(newLen-1)
 }
 
@@ -521,6 +515,7 @@ async function playItem(idx){
   if (!playlist[idx]) return
   if (playing !== null) playlist[playing].player.detach()
   playing = idx
+  if (!joined) return
 
   const {mediaUuid, player, htmlElement, remote, ownerId} = playlist[idx]
   roomPlayer = player
@@ -569,11 +564,10 @@ webSocket.onopen = (event) => {
       chatInput.value = ""
     }
 
-    //TODO: show disclaimer for P2P connections and don't allow peer
-    //connections until the user accepts
     usernameDialog.showModal()
     usernameForm.addEventListener('submit', (ev) => {
       ev.preventDefault()
+      joined = true
       
       const msg = {
         type: 'user-identified',
@@ -585,6 +579,15 @@ webSocket.onopen = (event) => {
       usernameDialog.close()
 
       manageMessage(msg) //Send to ourselves so we can save the info of our user
+
+      // Ask for the current video timing
+      console.log('Sending "sync?"')
+      sendToServer({
+        type: 'sync?',
+        from: myId
+      })
+
+      playItem(playing)
     })
 }
 
@@ -778,6 +781,8 @@ function configureCodecs(peerConnection) {
 }
 
 function createPeerConnection(peerId) {
+    if (!joined) return //Safety check to not allow connections if the privacy warning wasn't acknowledged
+
     const peerConnection = new RTCPeerConnection(WebRTCConnectionConfig)
 
     peerConnection.peerId = peerId
