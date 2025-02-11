@@ -320,7 +320,7 @@ async fn manage_message(my_id: u8, msg: Message, room: &room::SharedRoom) -> Res
 
 /*async fn manage_whip_request(bytes: bytes::Bytes, sdp: Arc<Mutex<String>>, users: Users) -> Result<Response<String>, Infallible>{
     let msg = json!({
-        "type": "video-offer",
+        "type": "wrtc-connection-offer",
         "from": 0,
         "to": 1,
         "sdp": {

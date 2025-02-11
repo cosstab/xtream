@@ -64,7 +64,7 @@ screenShareBt.addEventListener('click', () => {
 /*function streamObs(){
   let obs = users[0] = {}
   obs.peerConnection = createPeerConnection(0)
-  handleNegotiationNeededEvent2(obs.peerConnection)
+  onNegotiationNeeded2(obs.peerConnection)
 }*/
 
 fullscreenBt.addEventListener('click', () => {
@@ -509,7 +509,7 @@ async function addPlaylistItemFromRemote(mediaUuid, name, metadata, ownerId) {
 
   //if (newLen === 1) 
   // Ask for the current video position
-  console.log('Sending sync?')
+  console.log('Sending "sync?"')
   sendToServer({
     type: 'sync?',
     from: myId
@@ -598,14 +598,14 @@ function manageMessage(msg) {
     case "chat":
       appendUserMessage(msg)
       break
-    case "video-offer":
-      handleVideoOfferMsg(msg)
+    case "wrtc-connection-offer":
+      onConnectionOffer(msg)
       break
-    case "video-answer":
-      handleVideoAnswerMsg(msg)
+    case "wrtc-connection-answer":
+      onConnectionAnswer(msg)
       break
-    case "new-ice-candidate":
-      handleNewICECandidateMsg(msg)
+    case "wrtc-ice-candidate":
+      onICECandidateReceived(msg)
       break
     case "new-user":
       users[msg.id] = {}
@@ -700,6 +700,8 @@ webSocket.onclose = (ev) => {
 }
 
 //----------------------------------- WebRTC -----------------------------------
+// WebRTC connection configuration
+
 const WebRTCConnectionConfig = {
   iceServers: [
     { urls: "stun:stun1.l.google.com:19302" },
@@ -782,10 +784,10 @@ function createPeerConnection(peerId) {
     peerConnection.lastPort = []
     configureCodecs(peerConnection)
 
-    peerConnection.addEventListener('negotiationneeded', handleNegotiationNeededEvent)
-    peerConnection.addEventListener('icecandidate', handleICECandidateEvent)
-    peerConnection.addEventListener('iceconnectionstatechange', handleICEConnectionStateChangeEvent)
-    peerConnection.addEventListener('track', handleTrackEvent)
+    peerConnection.addEventListener('negotiationneeded', onNegotiationNeeded)
+    peerConnection.addEventListener('icecandidate', onICECandidateCreated)
+    peerConnection.addEventListener('iceconnectionstatechange', onICEConnectionStateChange)
+    peerConnection.addEventListener('track', onRemoteTrack)
     peerConnection.addEventListener('datachannel', onRemoteDataChannel)
     
     return peerConnection
@@ -793,22 +795,26 @@ function createPeerConnection(peerId) {
 
 
 //----------- WebRTC SDP Negotiation -----------
-async function handleNegotiationNeededEvent() {
+// Stuff needed to negotiate the technical terms of a WebRTC connection.
 
+async function onNegotiationNeeded() {
+// Sends the first connection offer to the peer in order to establish a connection.
+// Triggered after creating a new RTCPeerConnection. Sometimes renegotiation is needed
+// when network conditions change.
   const offer = await this.createOffer()
 
   await this.setLocalDescription(offer)
 
   let sdp = this.localDescription //relaying ? users[0].peerConnection.remoteDescription : this.localDescription
   sendToServer({
-    type: "video-offer",
+    type: "wrtc-connection-offer",
     from: myId,
     to: this.peerId,
     sdp: sdp,
   })
 }
 
-/*function handleNegotiationNeededEvent2(peer) {
+/*function onNegotiationNeeded2(peer) {
   peer
     .createOffer({ offerToReceiveVideo: true, offerToReceiveAudio: true })
     .then((offer) => peer.setLocalDescription(offer))
@@ -816,7 +822,7 @@ async function handleNegotiationNeededEvent() {
       //Wait for ICE candidates to be gathered, and send the offer that contains them
       setTimeout(() => {
         sendToServer({
-          type: "video-offer",
+          type: "wrtc-connection-offer",
           from: myId,
           to: peer.peerId,
           sdp: peer.localDescription,
@@ -826,7 +832,11 @@ async function handleNegotiationNeededEvent() {
     .catch(reportError)
 }*/
 
-async function handleVideoOfferMsg(msg) {
+
+async function onConnectionOffer(msg) {
+// We've received a connection offer from other peer, so we send an answer
+// in order to negotiate the conditions of the connection. WebRTC will start
+// sending ICE candidates after this.
   const peer = users[msg.from]
   peer.peerConnection = createPeerConnection(msg.from)
 
@@ -837,7 +847,7 @@ async function handleVideoOfferMsg(msg) {
   await peer.peerConnection.setLocalDescription(answer)
 
   const outgoingMsg = {
-    type: "video-answer",
+    type: "wrtc-connection-answer",
     from: myId,
     to: msg.from,
     sdp: peer.peerConnection.localDescription,
@@ -860,18 +870,25 @@ async function handleVideoOfferMsg(msg) {
   sendToServer(outgoingMsg)
 }
 
-function handleVideoAnswerMsg(msg) {
+
+function onConnectionAnswer(msg) {
+// We received the final answer to the negotiation. WebRTC will start
+// sending ICE candidates after this.
   const desc = new RTCSessionDescription(msg.sdp)
   const peer = users[msg.from]
 
   peer.peerConnection.setRemoteDescription(desc)
 }
 
-//----------- WebRTC ICE -----------
-function handleICECandidateEvent(event) {
+//----------- WebRTC ICE exchange -----------
+// ICE candidates contain the network directions necessary to establish a 
+// P2P connection.
+
+function onICECandidateCreated(event) {
+// WebRTC generated a new ICE candidate we need to send to the other peer.
   if (event.candidate) {
     sendToServer({
-      type: "new-ice-candidate",
+      type: "wrtc-ice-candidate",
       from: myId,
       to: this.peerId,
       candidate: event.candidate,
@@ -887,7 +904,9 @@ function natDebug(candidate, peer){
   }
 }
 
-function handleNewICECandidateMsg(msg) {
+function onICECandidateReceived(msg) {
+// We received a connection candidate from the other peer, so we let WebRTC
+// know about it.
   const peer = users[msg.from]
 
   natDebug(msg.candidate.candidate, peer)
@@ -903,8 +922,8 @@ function handleNewICECandidateMsg(msg) {
   }
 }
 
-function handleICEConnectionStateChangeEvent(event) {
-  // Port prediction debugging
+function onICEConnectionStateChange(event) {
+// Port prediction debugging
   if (streaming && this.iceConnectionState == "connected"){
     this.getSenders().forEach(sender => {
       const selectedPort = sender.transport.iceTransport.getSelectedCandidatePair().remote.port
@@ -916,7 +935,10 @@ function handleICEConnectionStateChangeEvent(event) {
 }
 
 //----------- WebRTC Stream events -----------
-function handleTrackEvent(event) {
+// Stuff needed to manage the streams of data after we established a peer connection.
+
+function onRemoteTrack(event) {
+// A remote peer created a new audio or video track (used for screen sharing and audio chat).
   //if (!relaying){
     console.log("received stream " + event.streams[0].id)
     localStream.srcObject = event.streams[0]
@@ -945,6 +967,7 @@ function handleTrackEvent(event) {
 }
 
 function onRemoteDataChannel(event) {
+// A new DataChannel was established by a peer, so we can start sending media (used to stream files).
   event.channel.addEventListener('open', () => sendMedia(event.channel.label, event.channel))
 }
 
