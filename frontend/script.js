@@ -10,7 +10,7 @@ var roomPlayer = null
 var joined = false
 
 const FULLSYNC = true
-var waitingToSync = false
+var waitingFirstSync = false // false, 'play' or 'pause'. The behaviour after syncing with others
 
 var videoLoaded = false
 
@@ -388,11 +388,12 @@ localStream.addEventListener("loadeddata", (event) => {
 
 localStream.addEventListener("canplay", (event) => {
   console.log("Can Play.")
-  if (waitingToSync && FULLSYNC) {
-    waitingToSync = false
+  if (waitingFirstSync==='play' && FULLSYNC) {
     sendVideoSync(localStream, { paused: false })
     setTimeout(() => localStream.play(), 500)
   }
+
+  waitingFirstSync = false
 })
 
 localStream.addEventListener("stalled", (event) => {
@@ -526,10 +527,14 @@ async function playItem(idx){
 
   htmlElement.classList.add('loader')
   
-  if (remote)
-    receiveMedia(mediaUuid, player, ownerId)
-  else
-    await player.loadStreams()
+  try {
+    if (remote)
+      receiveMedia(mediaUuid, player, ownerId)
+    else
+      await player.loadStreams()
+  } catch (e){
+    console.error(e)
+  }
 }
 
 async function removePlaylistItemsFromUser(userId) {
@@ -582,18 +587,15 @@ webSocket.onopen = (event) => {
 
       // Ask for the current video timing
       console.log('Sending "sync?"')
+      waitingFirstSync = "pause"
       sendToServer({
         type: 'sync?',
         from: myId
       })
-
-      playItem(playing)
     })
 }
 
 function manageMessage(msg) {
-  //if ((msg.to !== undefined) && (msg.to != myId)) return
-
   debug(msg)
   console.log(msg.type)
 
@@ -654,6 +656,7 @@ function manageMessage(msg) {
       localStream.pause()
 
       if (!msg.paused) setTimeout(() => localStream.play(), 300)
+      if (waitingFirstSync) playItem(playing)
       break
     case 'sync?':
       if (seeding) {
@@ -672,10 +675,11 @@ function manageMessage(msg) {
       }
       break
     case 'you-sync':
-      waitingToSync = true
+      waitingFirstSync = 'play'
       localStream.currentTime = msg.currentTime
       break
     case 'playlist-new-media':
+      seeding = false
       addPlaylistItemFromRemote(msg.mediaUuid, msg.name, msg.metadata, msg.from)
       break
     /*case 'request-media':
@@ -1001,7 +1005,7 @@ function getMediaStream(){
 async function sendMedia(socketLabel, socket) {
   const [streamType, mediaUuid] = socketLabel.split('.')
   
-  const playlistElement = playlist.find((element) => element.mediaUuid === mediaUuid)
+  const playlistElement = playlist.findLast((element) => element.mediaUuid === mediaUuid)
   const player = playlistElement.player
 
   await player.streamLoading
@@ -1010,7 +1014,7 @@ async function sendMedia(socketLabel, socket) {
 
 async function receiveMedia(mediaUuid, player, ownerId) {
   const otherSocket = await createDataChannel(ownerId, `other.${mediaUuid}`)
-  otherSocket.addEventListener('open', player.receiveStreams(otherSocket, 'other')) //, updatePlayerControls))
+  otherSocket.addEventListener('open', player.receiveStreams(otherSocket, 'other'))
 
   const videoSocket = await createDataChannel(ownerId, `video.${mediaUuid}`)
   videoSocket.addEventListener('open', player.receiveStreams(videoSocket, 'video'))
