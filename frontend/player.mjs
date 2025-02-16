@@ -335,8 +335,10 @@ export class FilePlayer extends Player {
     this.ffmpeg.deleteFile(this.fileName)
 
     console.log('Buffering streams')
-    this.vStreamLoader.bufferUntilFull(this.videoStreams[0])
-    this.aStreamLoader.bufferUntilFull(this.audioStreams[0])
+    await Promise.all([
+      this.vStreamLoader.bufferUntilFull(this.videoStreams[0]),
+      this.aStreamLoader.bufferUntilFull(this.audioStreams[0])
+    ])
 
     console.log('Streams are loading')
     // Maybe ffmpeg.terminate() and delete this.file here
@@ -407,7 +409,7 @@ export class StreamableFilePlayer extends FilePlayer {
 
 export class StreamPlayer extends Player {
   // Receives streams from another player trough a socket connection
-  async receiveStreams(socket, streamType, callback) {
+  async receiveStreams(socket, streamType) {
     console.log('New Stream: ' + streamType)
 
     socket.binaryType = 'arraybuffer'
@@ -419,9 +421,8 @@ export class StreamPlayer extends Player {
 
         console.log('Creating video reader')
         const segmentReader = new SegmentReaderFromSocket(socket, 0, receiving)
-        //this.vStreamLoader.bufferUntilFull(segmentReader)
-        //this.vStreamLoader.bufferFromTimestamp(this.videoElement.currentTime, segmentReader)
-        this.vStreamLoader.initializeSourceBuffer(segmentReader)
+        await this.vStreamLoader.bufferFromTimestamp(this.videoElement.currentTime, segmentReader)
+
         break
       case 'audio':
         // Readers of the same socket will share a promise to wait for an ongoing transfer to end
@@ -432,10 +433,9 @@ export class StreamPlayer extends Player {
           console.log('Creating audio reader', i)
           this.audioStreams[i] = new SegmentReaderFromSocket(socket, i, receiving)
         }
-        
-        //this.aStreamLoader.bufferUntilFull(this.audioStreams[0])
-        //this.aStreamLoader.bufferFromTimestamp(this.videoElement.currentTime, this.audioStreams[0])
-        this.aStreamLoader.initializeSourceBuffer(this.audioStreams[0])
+
+        await this.aStreamLoader.bufferFromTimestamp(this.videoElement.currentTime, this.audioStreams[0])
+
         break
       case 'other':
         socket.addEventListener('message', (ev) => {
@@ -457,7 +457,6 @@ export class StreamPlayer extends Player {
                 console.debug('Subtitle download completed')
                 this.subtitleStreams[i].stream = new Blob(this.subtitleStreams[i].streamTemp, { type: 'text/vtt'})
                 //this.subtitleStreams[i].stream = ev.data.slice(0, ev.data.size, 'text/vtt') //Set blob type. May not work on Safari https://stackoverflow.com/questions/18998543/set-content-type-on-blob#comment115879337_50875615
-                callback()
               }
               
               break
@@ -468,7 +467,7 @@ export class StreamPlayer extends Player {
     }
 
     // TODO: promise won't be resolved when the media has no audio or video streams
-    if (this.vStreamLoader.segmentReader && this.aStreamLoader.segmentReader) this._resolveStreamLoading()
+    if (streamType == 'audio' || streamType == 'video') this._resolveStreamLoading()
   }
 }
 
@@ -581,16 +580,22 @@ class StreamLoader {
     this.nextSegment = 0
     this.buffering = false
     this.lastSegmentLoaded = true
-    this.loadedPromiseResolve = null
-    this.loadedPromise = new Promise(resolve => this.loadedPromiseResolve = resolve)
+    //this.loadedPromiseResolve = null
+    //this.loadedPromise = new Promise(resolve => this.loadedPromiseResolve = resolve)
   }
 
   async initializeSourceBuffer(segmentReader) {
     this.segmentReader ??= segmentReader
     const config = await this.segmentReader.config
     let mimeType = `${config.mimeType};${config.codecs}`
-    this.sourceBuffer = this.mediaSource.addSourceBuffer(mimeType)
-    console.log(mimeType)
+    try {
+      this.sourceBuffer = this.mediaSource.addSourceBuffer(mimeType)
+    } catch (e) {
+      if (e.name == 'NotSupportedError') throw new CantPlayTrackError(mimeType)
+      throw e
+    }
+    
+    console.log('Source buffer can play: ' + mimeType)
     this.sourceBuffer.mode = 'sequence'
   }
 
@@ -599,7 +604,7 @@ class StreamLoader {
 
     this.buffering = true
     
-    if (!this.sourceBuffer) this.initializeSourceBuffer(segmentReader)
+    if (!this.sourceBuffer) await this.initializeSourceBuffer(segmentReader)
     else if (segmentReader) this.segmentReader = segmentReader
 
     this.lastSegmentLoaded = false
@@ -648,7 +653,7 @@ class StreamLoader {
 
     appendNextSegment()
 
-    return this.loadedPromise
+    //return this.loadedPromise
   }
 
   needsBuffering(time) {
@@ -842,4 +847,13 @@ function waitForEvent(target, event) {
   return new Promise(res => {
     target.addEventListener(event, res, { once: true });
   });
+}
+
+class CantPlayTrackError extends Error {
+  constructor(mimeType) {
+    super('The track with the following mimeType cannot be played: ' + mimeType)
+    this.name = 'CantPlayTrackError'
+
+    this.mimeType = mimeType
+  }
 }
