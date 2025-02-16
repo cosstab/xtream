@@ -7,7 +7,7 @@ use warp::filters::ws::Message;
 ///
 /// - Key is their id
 /// - Value is a sender of `warp::ws::Message`
-pub type Users = HashMap<u8, mpsc::UnboundedSender<Message>>;
+pub type Users = HashMap<u32, mpsc::UnboundedSender<Message>>;
 
 type RoomState = Vec<String>;
 

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::thread;
 use std::time::Duration;
 
@@ -19,7 +19,7 @@ use clap::Parser;
 mod room;
 
 /// Our global unique user id counter.
-static NEXT_USER_ID: AtomicU8 = AtomicU8::new(1);
+static NEXT_USER_ID: AtomicU32 = AtomicU32::new(1);
 
 type Rooms<'a> = Arc<RwLock<HashMap<String, room::SharedRoom>>>;
 
@@ -171,7 +171,7 @@ async fn new_ws_connection<'a>(ws: WebSocket, room_id: String, rooms: Rooms<'a>)
     println!("Good bye user: {user_id}");
 }
 
-async fn user_connected(ws: WebSocket, room: &room::SharedRoom, user_id: u8) -> Result<(),Box<dyn std::error::Error>>{
+async fn user_connected(ws: WebSocket, room: &room::SharedRoom, user_id: u32) -> Result<(),Box<dyn std::error::Error>>{
     // Split the socket into a message sender and receiver.
     let (user_ws_tx, mut user_ws_rx) = ws.split();
 
@@ -195,7 +195,7 @@ async fn user_connected(ws: WebSocket, room: &room::SharedRoom, user_id: u8) -> 
 
     // Send JSON list of online users to the new one.
     let users = room.read().await.users.clone();
-    let id_vec = users.keys().cloned().collect::<Vec<u8>>();
+    let id_vec = users.keys().cloned().collect::<Vec<u32>>();
     let json = json!({
         "type": "room-status",
         "myId": user_id,
@@ -226,7 +226,7 @@ async fn user_connected(ws: WebSocket, room: &room::SharedRoom, user_id: u8) -> 
     Ok(())
 }
 
-async fn create_sender(mut user_ws_tx: SplitSink<WebSocket, Message>, user_id: u8) -> UnboundedSender<Message> {
+async fn create_sender(mut user_ws_tx: SplitSink<WebSocket, Message>, user_id: u32) -> UnboundedSender<Message> {
     // Use an MPSC (multiple producers, single consumer) unbounded channel to handle buffering 
     // and flushing of messages of the WebSocket.
     // We'll return the sender that other connections will use to communicate with this user.
@@ -252,7 +252,7 @@ async fn create_sender(mut user_ws_tx: SplitSink<WebSocket, Message>, user_id: u
     return tx;
 }
 
-async fn broadcast_to_room(my_id: u8, msg: &str, users: &room::Users) {
+async fn broadcast_to_room(my_id: u32, msg: &str, users: &room::Users) {
     for (&uid, tx) in users.iter() {
         if my_id != uid {
             tx.send(Message::text(msg))
@@ -263,7 +263,7 @@ async fn broadcast_to_room(my_id: u8, msg: &str, users: &room::Users) {
     };
 }
 
-async fn manage_message(my_id: u8, msg: Message, room: &room::SharedRoom) -> Result<(),Box<dyn std::error::Error>>{
+async fn manage_message(my_id: u32, msg: Message, room: &room::SharedRoom) -> Result<(),Box<dyn std::error::Error>>{
     if msg.is_pong() { return Ok(()); }
 
     let msg = msg.to_str()
@@ -294,16 +294,9 @@ async fn manage_message(my_id: u8, msg: Message, room: &room::SharedRoom) -> Res
         return Ok(());
     }*/
 
-    match parsed_msg["to"].as_str() {
-        Some(to) => { //Forward msg to the intended user
-            match room.read().await
-                    .users.get(&to.parse::<u8>()?) {
-                Some(sender) => { sender.send(Message::text(msg))?; },
-                None => return Err("Recipient doesn't exist.".into()),
-            }
-        },
-        None => { //No 'to' in the received msg, so broadcast it to everybody except this user
-            for (&uid, tx) 
+    if parsed_msg["to"].is_null() {
+        //No 'to' in the received msg, so broadcast it to everybody except this user
+        for (&uid, tx) 
             in room.read().await
                 .users.iter() {
 
@@ -312,6 +305,17 @@ async fn manage_message(my_id: u8, msg: Message, room: &room::SharedRoom) -> Res
                 }
 
             }
+    } else {
+        match parsed_msg["to"].as_u64() {
+            Some(to) => {
+                //Forward msg to the intended user
+                match room.read().await
+                    .users.get(&(to as u32)) {
+                    Some(sender) => { sender.send(Message::text(msg))?; },
+                    None => return Err("Recipient doesn't exist.".into()),
+                }
+            },
+            None => return Err("Malformed recipient id.".into())
         }
     }
 
