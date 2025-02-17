@@ -49,8 +49,8 @@ export default class Player {
     this.mediaSource = new MediaSource()
     this.videoElement.src = URL.createObjectURL(this.mediaSource)
     await waitForEvent(this.mediaSource, 'sourceopen')
-    this.mediaSource.addEventListener('sourceended', () => {console.error('sourceended')})
-    this.mediaSource.addEventListener('sourceclose', () => {console.error('sourceclose')})
+    this.mediaSource.addEventListener('sourceended', () => {console.log('sourceended')})
+    this.mediaSource.addEventListener('sourceclose', () => {console.log('sourceclose')})
     if (this.metadata) this.mediaSource.duration = this.metadata.duration
 
     // The first segments of audio and video need to be provided at the same time to the
