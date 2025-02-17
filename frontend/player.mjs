@@ -19,6 +19,8 @@ export default class Player {
 
     // Promise that will be resolved when streams can be appended
     this.streamLoading = new Promise((resolve) => this._resolveStreamLoading = resolve)
+
+    this.bufferIntervalId = null
   }
 
   // We'll call this function when the playing audio and video streams are fully loaded
@@ -33,14 +35,15 @@ export default class Player {
     console.log ('Audio streams: ', await this.listStreams("audio"))
     console.log ('Subtitle streams: ', await this.listStreams("subtitle"))
 
-    //this.videoElement.addEventListener('timeupdate', this.onTimeUpdate)
+    const buffer = () => {
+      Promise.all([
+        this.aStreamLoader?.bufferFromTimestamp(this.videoElement.currentTime),
+        this.vStreamLoader?.bufferFromTimestamp(this.videoElement.currentTime)
+      ])
+    }
+    // Check if buffering is needed every 500ms, after streams are loaded.
     this.streamLoading.then(() => {
-      setInterval(() => {
-        Promise.all([
-          this.aStreamLoader?.bufferFromTimestamp(this.videoElement.currentTime),
-          this.vStreamLoader?.bufferFromTimestamp(this.videoElement.currentTime)
-        ])
-      }, 500) //TODO: clearInterval() after detach()?
+      this.bufferIntervalId = setInterval(buffer, 500)
     })
 
     this.mediaSource = new MediaSource()
@@ -115,7 +118,7 @@ export default class Player {
   detach(){
     // Maybe terminate all ffmpeg stuff here
     // Maybe some error can occur when detach is called while StreamLoader is working
-    //this.videoElement.removeEventListener('timeupdate', this.onTimeUpdate)
+    clearInterval(this.bufferIntervalId)
   }
 }
 
