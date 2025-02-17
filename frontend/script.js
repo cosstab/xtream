@@ -565,7 +565,7 @@ async function removePlaylistItemsFromUser(userId) {
     if (item.ownerId == userId) {
       item.htmlElement.remove()
       item.player.detach()
-      delete playlist[idx]
+      playlist.splice(idx, 1)
     }
   }
 }
