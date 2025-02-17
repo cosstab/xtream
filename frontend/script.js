@@ -1,4 +1,4 @@
-import { StreamableFilePlayer, StreamPlayer } from './player.mjs'
+import { StreamableFilePlayer, StreamPlayer, CantPlayTrackError } from './player.mjs'
 
 var myId
 const users = {} //TODO: create User class
@@ -174,6 +174,7 @@ function appendUserMessage(msg) {
   const username = users[msg.from]?.username ?? msg.from
 
   const line = document.createElement('p')
+  if (msg.type == 'error') line.classList.add('error-msg')
   line.textContent = username + "> " + msg.txt
   chatTL.appendChild(line)
   chatTL.scrollTop = chatTL.scrollHeight
@@ -186,6 +187,15 @@ function appendInfoMessage(txt) {
   chatTL.appendChild(line)
   chatTL.scrollTop = chatTL.scrollHeight
 }
+
+function appendErrorMessage(txt) {
+  const line = document.createElement('p')
+  line.classList.add('error-msg')
+  line.textContent = txt
+  chatTL.appendChild(line)
+  chatTL.scrollTop = chatTL.scrollHeight
+}
+
 
 //-------------------------- Background illumination
 // We'll apply the filters to a low resolution buffer canvas for improved performance
@@ -529,11 +539,24 @@ async function playItem(idx){
   
   try {
     if (remote)
-      receiveMedia(mediaUuid, player, ownerId)
+      await receiveMedia(mediaUuid, player, ownerId)
     else
       await player.loadStreams()
   } catch (e){
-    console.error(e)
+    htmlElement.classList.remove('loader')
+
+    if (e instanceof CantPlayTrackError) {
+      if (!remote) return appendErrorMessage(e.message)
+      
+      let msg = {
+        type: 'error',
+        from: myId,
+        txt: 'My browser cannot play the track with the following mimeType: ' + e.mimeType
+      }
+      sendToServer(msg)
+      appendUserMessage(msg)
+    }
+    else throw e
   }
 }
 
@@ -601,6 +624,9 @@ function manageMessage(msg) {
 
   switch(msg.type) {
     case "chat":
+      appendUserMessage(msg)
+      break
+    case "error":
       appendUserMessage(msg)
       break
     case "wrtc-connection-offer":
@@ -1014,13 +1040,13 @@ async function sendMedia(socketLabel, socket) {
 
 async function receiveMedia(mediaUuid, player, ownerId) {
   const otherSocket = await createDataChannel(ownerId, `other.${mediaUuid}`)
-  otherSocket.addEventListener('open', player.receiveStreams(otherSocket, 'other'))
+  otherSocket.addEventListener('open', await player.receiveStreams(otherSocket, 'other'))
 
   const videoSocket = await createDataChannel(ownerId, `video.${mediaUuid}`)
-  videoSocket.addEventListener('open', player.receiveStreams(videoSocket, 'video'))
+  videoSocket.addEventListener('open', await player.receiveStreams(videoSocket, 'video'))
   
   const audioSocket = await createDataChannel(ownerId, `audio.${mediaUuid}`)
-  audioSocket.addEventListener('open', player.receiveStreams(audioSocket, 'audio'))
+  audioSocket.addEventListener('open', await player.receiveStreams(audioSocket, 'audio'))
 }
 
 

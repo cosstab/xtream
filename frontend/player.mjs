@@ -849,9 +849,9 @@ function waitForEvent(target, event) {
   });
 }
 
-class CantPlayTrackError extends Error {
+export class CantPlayTrackError extends Error {
   constructor(mimeType) {
-    super('The track with the following mimeType cannot be played: ' + mimeType)
+    super('The track with the following mimeType is not supported by your browser: ' + mimeType)
     this.name = 'CantPlayTrackError'
 
     this.mimeType = mimeType

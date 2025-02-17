@@ -225,6 +225,10 @@ button {
     background-color: #ffffff27;
 }
 
+.error-msg {
+    color: red;
+}
+
 #send-bt {
     flex: 1;
     border: 0;
