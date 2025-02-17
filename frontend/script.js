@@ -1040,13 +1040,19 @@ async function sendMedia(socketLabel, socket) {
 
 async function receiveMedia(mediaUuid, player, ownerId) {
   const otherSocket = await createDataChannel(ownerId, `other.${mediaUuid}`)
-  otherSocket.addEventListener('open', await player.receiveStreams(otherSocket, 'other'))
+  await waitForEvent(otherSocket, 'open')
 
   const videoSocket = await createDataChannel(ownerId, `video.${mediaUuid}`)
-  videoSocket.addEventListener('open', await player.receiveStreams(videoSocket, 'video'))
+  await waitForEvent(videoSocket, 'open')
   
   const audioSocket = await createDataChannel(ownerId, `audio.${mediaUuid}`)
-  audioSocket.addEventListener('open', await player.receiveStreams(audioSocket, 'audio'))
+  await waitForEvent(audioSocket, 'open')
+
+  await Promise.all([
+    player.receiveStreams(otherSocket, 'other'),
+    player.receiveStreams(videoSocket, 'video'),
+    player.receiveStreams(audioSocket, 'audio')
+  ])
 }
 
 
@@ -1071,6 +1077,12 @@ function* portPrediction(candidate) {
   }
   
   yield candidate
+}
+
+function waitForEvent(target, event) {
+  return new Promise(res => {
+    target.addEventListener(event, res, { once: true });
+  });
 }
 
 
