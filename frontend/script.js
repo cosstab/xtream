@@ -824,6 +824,7 @@ function createPeerConnection(peerId) {
     peerConnection.addEventListener('iceconnectionstatechange', onICEConnectionStateChange)
     peerConnection.addEventListener('track', onRemoteTrack)
     peerConnection.addEventListener('datachannel', onRemoteDataChannel)
+    peerConnection.addEventListener('connectionstatechange', onConnectionStateChange)
     
     return peerConnection
 }
@@ -1006,6 +1007,14 @@ function onRemoteDataChannel(event) {
   event.channel.addEventListener('open', () => sendMedia(event.channel.label, event.channel))
 }
 
+function onConnectionStateChange(event) {
+  console.log('WebRTC connection with user ' + this.peerId + ' changed status: ' + this.connectionState)
+  switch (this.connectionState) {
+    case 'failed':
+      appendErrorMessage("Connection with " + users[this.peerId].username + ' failed. The peer disconnected or is behind a Strict NAT.')
+      break
+  }
+}
 
 //----------------------------------- Media acquisition -----------------------------------
 const displayMediaOptions = {
