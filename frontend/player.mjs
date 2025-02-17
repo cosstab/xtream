@@ -372,7 +372,7 @@ export class StreamableFilePlayer extends FilePlayer {
             config: subtitle.config,
             meta: subtitle.meta
           }))
-          await waitForEvent(socket, 'bufferedamountlow')
+          //await waitForEvent(socket, 'bufferedamountlow')
 
           console.debug('Sending subtitle stream', subtitle.stream)
           var length = subtitle.stream.byteLength
